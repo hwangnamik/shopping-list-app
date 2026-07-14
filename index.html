@@ -169,10 +169,112 @@
     }
 
     .clear-btn:hover { background: #fff5f5; }
+
+    .auth-form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .auth-form input {
+      padding: 10px 14px;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      color: #2d3748;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .auth-form input:focus { border-color: #667eea; }
+
+    .auth-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .auth-actions button {
+      flex: 1;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .auth-actions #loginBtn {
+      background: #667eea;
+      color: #fff;
+      border: none;
+    }
+
+    .auth-actions #loginBtn:hover { background: #5a67d8; }
+
+    .auth-actions #signupBtn {
+      background: none;
+      border: 1.5px solid #cbd5e0;
+      color: #4a5568;
+    }
+
+    .auth-actions #signupBtn:hover { background: #f7fafc; }
+
+    .auth-msg {
+      font-size: 0.8rem;
+      color: #e53e3e;
+      min-height: 1em;
+    }
+
+    .user-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .user-bar span {
+      font-size: 0.8rem;
+      color: #718096;
+      word-break: break-all;
+    }
+
+    .user-bar button {
+      flex-shrink: 0;
+      padding: 6px 12px;
+      background: none;
+      border: 1.5px solid #e2e8f0;
+      color: #4a5568;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .user-bar button:hover { background: #f7fafc; }
   </style>
 </head>
 <body>
-<div class="card">
+<div class="card" id="authCard">
+  <h1>🛒 쇼핑 리스트</h1>
+  <p class="subtitle">로그인하고 나만의 리스트를 관리하세요</p>
+
+  <div class="auth-form">
+    <input id="authEmail" type="email" placeholder="이메일" autocomplete="email" />
+    <input id="authPassword" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="current-password" />
+    <div class="auth-actions">
+      <button id="loginBtn">로그인</button>
+      <button id="signupBtn">회원가입</button>
+    </div>
+    <p id="authMsg" class="auth-msg"></p>
+  </div>
+</div>
+
+<div class="card" id="appCard" style="display:none">
+  <div class="user-bar">
+    <span id="userEmail"></span>
+    <button id="logoutBtn">로그아웃</button>
+  </div>
+
   <h1>🛒 쇼핑 리스트</h1>
   <p class="subtitle">오늘 사야 할 것들을 적어보세요</p>
 
@@ -198,6 +300,16 @@
   const SUPABASE_KEY = 'sb_publishable__U3SKdWENZME2YmtgnhJhA_Xw6R2IBW';
   const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+  const authCard = document.getElementById('authCard');
+  const appCard = document.getElementById('appCard');
+  const authEmail = document.getElementById('authEmail');
+  const authPassword = document.getElementById('authPassword');
+  const authMsg = document.getElementById('authMsg');
+  const loginBtn = document.getElementById('loginBtn');
+  const signupBtn = document.getElementById('signupBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const userEmail = document.getElementById('userEmail');
+
   const input = document.getElementById('itemInput');
   const addBtn = document.getElementById('addBtn');
   const list = document.getElementById('list');
@@ -207,6 +319,67 @@
   const clearBtn = document.getElementById('clearBtn');
 
   let items = [];
+  let currentUser = null;
+
+  function setAuthMsg(text) {
+    authMsg.textContent = text || '';
+  }
+
+  async function signUp() {
+    const email = authEmail.value.trim();
+    const password = authPassword.value;
+    if (!email || !password) { setAuthMsg('이메일과 비밀번호를 입력해주세요.'); return; }
+    setAuthMsg('');
+    const { data, error } = await db.auth.signUp({ email, password });
+    if (error) { setAuthMsg(error.message); return; }
+    if (!data.session) {
+      setAuthMsg('가입 확인 이메일을 보냈습니다. 이메일을 확인한 후 로그인해주세요.');
+    }
+  }
+
+  async function signIn() {
+    const email = authEmail.value.trim();
+    const password = authPassword.value;
+    if (!email || !password) { setAuthMsg('이메일과 비밀번호를 입력해주세요.'); return; }
+    setAuthMsg('');
+    const { error } = await db.auth.signInWithPassword({ email, password });
+    if (error) { setAuthMsg(error.message); }
+  }
+
+  async function signOut() {
+    await db.auth.signOut();
+  }
+
+  function showAuthedUI(user) {
+    currentUser = user;
+    authCard.style.display = 'none';
+    appCard.style.display = 'block';
+    userEmail.textContent = user.email;
+    authEmail.value = '';
+    authPassword.value = '';
+    setAuthMsg('');
+    loadItems();
+  }
+
+  function showLoggedOutUI() {
+    currentUser = null;
+    items = [];
+    appCard.style.display = 'none';
+    authCard.style.display = 'block';
+  }
+
+  db.auth.onAuthStateChange((_event, session) => {
+    if (session && session.user) {
+      showAuthedUI(session.user);
+    } else {
+      showLoggedOutUI();
+    }
+  });
+
+  loginBtn.addEventListener('click', signIn);
+  signupBtn.addEventListener('click', signUp);
+  logoutBtn.addEventListener('click', signOut);
+  authPassword.addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
 
   async function loadItems() {
     const { data, error } = await db
@@ -264,7 +437,7 @@
 
     const { data, error } = await db
       .from('shopping_items')
-      .insert({ text, done: false })
+      .insert({ text, done: false, user_id: currentUser.id })
       .select()
       .single();
     if (error) {
@@ -319,8 +492,6 @@
     items = items.filter(i => !i.done);
     render();
   });
-
-  loadItems();
 </script>
 </body>
 </html>
